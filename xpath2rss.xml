@@ -276,7 +276,6 @@ try {
 		$confpath = "/var/www/rssconf/".$_GET["site"].".ini";
 		$conf = XPath2RSS::parseINI($confpath);
 
-		$w->loadRSS($conf['file']);
 		$w->loadHTML($conf['url']);
 		$w->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description'], $conf['pubDate'],$conf['link']);
 		$w->writeRSS($conf['feed'], $conf['url']);
