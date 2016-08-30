@@ -136,7 +136,7 @@ class XPath2RSS {
 	 * @param $titleTemplate Template for title-tag
 	 * @param $descrTemplate Template for description-tag
 	 */
-	public function scrape(array $vars, $context, $feedURL, $titleTemplate, $descrTemplate) {
+	public function scrape(array $vars, $context, $feedURL, $titleTemplate, $descrTemplate, $pubDateTemplate = false) {
 
 		if (empty($vars['guid']))
 			throw new Exception("A var called 'guid' must always be defined", self::EXC_HARD);
@@ -148,7 +148,6 @@ class XPath2RSS {
 				$replarray["$nodekey"]["%$key%"] = htmlspecialchars($node);
 			}
 		}
-		print_r($replarray);
 		foreach ($replarray as $repl) {
 			if (isset($this->db[$repl['%guid%']]))
 				return; // we have already seen this item
@@ -156,12 +155,17 @@ class XPath2RSS {
 			$feedURL       = htmlspecialchars($feedURL);
 			$title = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $titleTemplate));
 			$descr = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $descrTemplate));
+			if ($pubDateTemplate != false) {
+				$pubDate = date(DATE_RFC822,htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $pubDateTemplate)));
+			} else {
+				$pubDate = date(DATE_RFC822);
+			}
 
 			$this->db[$repl['%guid%']] = "<item>
 						<title>$title</title>
 						<link>$feedURL</link>
 						<guid isPermaLink=\"false\">{$repl['%guid%']}</guid>
-						<pubDate>" . date(DATE_RFC822) . "</pubDate>
+						<pubDate>$pubDate</pubDate>
 						<description>$descr</description>
 					</item>";
 		}
@@ -270,7 +274,7 @@ try {
 
 		$w->loadRSS($conf['file']);
 		$w->loadHTML($conf['url']);
-		$w->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description']);
+		$w->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description'], $conf['pubDate']);
 		$w->writeRSS($conf['file'], $conf['feed'], $conf['url']);
 	} else {
 		echo "No site requested";
