@@ -1,4 +1,3 @@
-#!/usr/bin/php
 <?php
 
 ini_set('display_errors', true);
@@ -56,7 +55,6 @@ class XPath2RSS {
 	public function xpath($expression, $context = null) {
 
 		return trim($this->xpathNode($expression, $context)->textContent);
-
 	}
 
 	/**
@@ -68,6 +66,7 @@ class XPath2RSS {
 
 		$xpath = new DOMXPath($this->doc);
 		$result = $context ? $xpath->query($expression, $this->xpathNode($context)) : $xpath->query($expression);
+		
 
 		if (!$result instanceof DOMNodeList)
 			throw new Exception("Invalid expression '$expression'", self::EXC_HARD);
@@ -75,7 +74,6 @@ class XPath2RSS {
 			throw new Exception("The expression '$expression' didn't match anything", self::EXC_SOFT);
 
 		return $result->item(0);
-
 	}
 
 	/**
@@ -198,7 +196,7 @@ class XPath2RSS {
 	 */
 	public function writeRSS($toFile, $feedTitle, $feedURL) {
 
-		file_put_contents($toFile, $this->getRSS($feedTitle, $feedURL));
+		echo $this->getRSS($feedTitle, $feedURL);
 
 	}
 
@@ -251,89 +249,28 @@ class XPath2RSS {
 
 }
 
-if (defined('XPATH2RSS_TEST'))
-	return; // we're running the test suite
-
-$argv = $_SERVER['argv'];
 $w = new XPath2RSS();
-
-if (
-	!empty($argv[1])
-	&&
-	(
-		empty($argv[2])
-		||
-		$argv[1] === '--gentle'
-		&&
-		!empty($argv[2])
-	)
-) { // Read config from .ini file and execute
-
-	try {
-
-		$gentle = $argv[1] === '--gentle';
-		$conf = XPath2RSS::parseINI($argv[$gentle ? 2 : 1]);
+try {
+	if(isset($_GET["site"])) {
+		$confpath = "/var/www/rssconf/".$_GET["site"].".ini";
+		$conf = XPath2RSS::parseINI($confpath);
 
 		$w->loadRSS($conf['file']);
 		$w->loadHTML($conf['url']);
 		$w->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description']);
 		$w->writeRSS($conf['file'], $conf['feed'], $conf['url']);
-
-	} catch (Exception $e) {
-
-		if (!$gentle || $e->getCode() !== XPath2RSS::EXC_SOFT)
-			throw $e;
-
+	} else {
+		echo "No site requested";
+		exit(0);
 	}
 
-	exit(0);
+} catch (Exception $e) {
 
-} else if (!empty($argv[1]) && $argv[1] === '--test') { // Run in testing mode
-
-	$conf = XPath2RSS::parseINI($argv[2]);
-
-	echo "\nConfiguration from \"{$argv[2]}\":\n\n";
-
-	foreach ($conf as $key => $value)
-		if ($key !== 'vars')
-			echo "\t$key => \"$value\"\n";
-
-	echo "\nCurrent guids in \"{$conf['file']}\":\n\n";
-
-	$w->loadRSS($conf['file']);
-
-	foreach ($w->getDB() as $key => $value)
-		echo "\t\"$key\"\n";
-
-	echo "\nXPath expressions from [vars]:\n\n";
-
-	foreach ($conf['vars'] as $key => $value)
-		echo "\t$key => \"$value\"\n";
-
-	echo "\nXPath matches against \"{$conf['url']}\":\n\n";
-
-	$w->loadHTML($conf['url']);
-
-	foreach ($conf['vars'] as $key => $value)
-		echo "\t$key => \"{$w->xpath($value, $conf['context'])}\"\n";
-
-	echo "\n";
-
-	exit(0);
-
-} else if (!empty($argv[1]) && $argv[1] === '--dry-run') { // Dry-run mode
-
-	$conf = XPath2RSS::parseINI($argv[2]);
-
-	$w->loadRSS($conf['file']);
-	$w->loadHTML($conf['url']);
-	$w->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description']);
-
-	echo $w->getRSS($conf['feed'], $conf['url']);
-
-	exit(0);
+		throw $e;
 
 }
+
+exit(0);
 
 ?>
 
