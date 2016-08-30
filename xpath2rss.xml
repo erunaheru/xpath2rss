@@ -40,7 +40,7 @@ class XPath2RSS {
 	 */
 	public function loadHTML($fromURL) {
 
-		@$this->doc = DOMDocument::loadHTML($this->wget($fromURL));
+		@$this->doc = DOMDocument::loadHTML(mb_convert_encoding($this->wget($fromURL), 'HTML-ENTITIES', 'UTF-8'));
 
 	}
 
@@ -151,7 +151,6 @@ class XPath2RSS {
 		foreach ($replarray as $repl) {
 			if (isset($this->db[$repl['%guid%']]))
 				return; // we have already seen this item
-
 			$feedURL       = htmlspecialchars($feedURL);
 			$title = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $titleTemplate));
 			$descr = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $descrTemplate));
@@ -187,7 +186,7 @@ class XPath2RSS {
 		$feedTitle = htmlspecialchars($feedTitle);
 		$feedURL   = htmlspecialchars($feedURL);
 
-		$rss = "<?xml version=\"1.0\"?>
+		$rss = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>
 			<rss version=\"2.0\">
 				<channel>
 					<title>$feedTitle</title>
