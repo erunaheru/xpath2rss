@@ -62,7 +62,7 @@ class XPath2RSS {
 	 * 
 	 * @see self::xpath()
 	 */
-	private function xpathNode($expression, $context = null) {
+	private function xpathNode($expression, $context = null, $returnarray = false) {
 
 		$xpath = new DOMXPath($this->doc);
 		$result = $context ? $xpath->query($expression, $this->xpathNode($context)) : $xpath->query($expression);
@@ -73,7 +73,11 @@ class XPath2RSS {
 		else if ($result->length == 0)
 			throw new Exception("The expression '$expression' didn't match anything", self::EXC_SOFT);
 
-		return $result->item(0);
+		if ($returnarray == true) {
+			return $result;
+		} else {
+			return $result->item(0);
+		}
 	}
 
 	/**
