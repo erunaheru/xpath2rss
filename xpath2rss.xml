@@ -53,8 +53,12 @@ class XPath2RSS {
 	 * @param $context Another XPath to use as the context for the previous one
 	 */
 	public function xpath($expression, $context = null) {
-
-		return trim($this->xpathNode($expression, $context)->textContent);
+		
+		$returnarray = array();
+		foreach ($this->xpathNode($expression, $context,true) as $node) {
+			$returnarray[] = trim($node->textContent);
+		}
+		return $returnarray;
 	}
 
 	/**
@@ -137,25 +141,30 @@ class XPath2RSS {
 		if (empty($vars['guid']))
 			throw new Exception("A var called 'guid' must always be defined", self::EXC_HARD);
 
-		$repl = array();
+		$replarray = array();
 
-		foreach ($vars as $key => $value)
-			$repl["%$key%"] = htmlspecialchars($this->xpath($value, $context));
+		foreach ($vars as $key => $value) {
+			foreach ($this->xpath($value, $context) as $nodekey => $node){
+				$replarray["$nodekey"]["%$key%"] = htmlspecialchars($node);
+			}
+		}
+		print_r($replarray);
+		foreach ($replarray as $repl) {
+			if (isset($this->db[$repl['%guid%']]))
+				return; // we have already seen this item
 
-		if (isset($this->db[$repl['%guid%']]))
-			return; // we have already seen this item
+			$feedURL       = htmlspecialchars($feedURL);
+			$title = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $titleTemplate));
+			$descr = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $descrTemplate));
 
-		$feedURL       = htmlspecialchars($feedURL);
-		$titleTemplate = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $titleTemplate));
-		$descrTemplate = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $descrTemplate));
-
-		$this->db[$repl['%guid%']] = "<item>
-					<title>$titleTemplate</title>
-					<link>$feedURL</link>
-					<guid isPermaLink=\"false\">{$repl['%guid%']}</guid>
-					<pubDate>" . date(DATE_RFC822) . "</pubDate>
-					<description>$descrTemplate</description>
-				</item>";
+			$this->db[$repl['%guid%']] = "<item>
+						<title>$title</title>
+						<link>$feedURL</link>
+						<guid isPermaLink=\"false\">{$repl['%guid%']}</guid>
+						<pubDate>" . date(DATE_RFC822) . "</pubDate>
+						<description>$descr</description>
+					</item>";
+		}
 
 	}
 
