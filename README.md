@@ -15,26 +15,18 @@ Installing
 
 On a Debian-like system, get the dependencies with:
 
-    $ apt-get install php5-cli php5-curl
+Set up a webserver with php support. Install php packages for curl and mysql. (Tested with Apache 2.4 and PHP 7.0)
+	
+Create a new mysql database and populate it with xpath2rss.sql.
 
-Then get yourself a copy of `xpath2rss.php` (might be handy to drop it in your `PATH` somewhere, like under `/usr/bin`).  Feel free to rename it to `xpath2rss` while you're at it if you don't like the extension (the interpreter is specified in the file).
+Place xpath2rss.xml and config-sample.php in the same folder in your webserver. Rename config-sample.php to config.php and set the configuration options.
+Either rename xpath2rss.xml to xpath2rss.php or set your webserver to process xml files as php.
 
-To see that it's a-OK, try running:
-
-    $ xpath2rss
-
-You should see a usage message.  PHP 5.3+ is recommended, but the script should run with anything 5.1+.
 
 Usage
 -----
 
-The command expects a path to a configuration file as its only argument.  The configuration file is a traditional ini-file that specifies what to fetch, the XPath expressions to use etc.  You can test out a configuration file by running:
-
-    $ xpath2rss --test myconfig.ini
-
-You'll see some useful info.
-
-The script is likely most useful when ran from a cron-like facility periodically.
+Open the file in a browser passing the configuration file name as a get arguement, for example for a configuration named news.ini open https://example.com/rss/xpath2rss.xml?site=news
 
 Configuration
 -------------
