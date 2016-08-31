@@ -1,5 +1,7 @@
 <?php
 
+require(dirname(__FILE__)."/config.php");
+
 ini_set('display_errors', true);
 
 /**
@@ -155,7 +157,12 @@ class XPath2RSS {
 			$title = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $titleTemplate));
 			$descr = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $descrTemplate));
 			if (!empty($pubDateTemplate)) {
-				$pubDate = date(DATE_RFC822,htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $pubDateTemplate)));
+				$dateString = htmlspecialchars(str_replace(array_keys($repl), array_values($repl), $pubDateTemplate));
+				if (is_numeric($dateString)){
+					$pubDate = date(DATE_RFC822,$dateString);
+				} else {
+					$pubDate = date(DATE_RFC822,strtotime($dateString,strtotime('today midnight')));
+				}
 			} else {
 				$pubDate = date(DATE_RFC822);
 			}
@@ -215,8 +222,13 @@ class XPath2RSS {
 	 * @param $toFile Filename to write to
 	 */
 	public function writeRSS($feedTitle, $feedURL) {
-
-		echo $this->getRSS($feedTitle, $feedURL);
+		$rssDoc = $this->getRSS($feedTitle, $feedURL);
+		$query = "INSERT into feeds (feedID, feed, lastUpdate, nextUpdate)
+					values(?, ?, NOW(),FROM_UNIXTIME(UNIX_TIMESTAMP(NOW())+FLOOR(3600+RAND()*3600)))
+				  ON DUPLICATE KEY UPDATE
+					feed=?, lastUpdate = NOW(), nextUpdate = FROM_UNIXTIME(UNIX_TIMESTAMP(NOW())+FLOOR(3600+RAND()*3600))";
+		$this->RSSQuery($query,false,true,array($feedTitle,$rssDoc,$rssDoc));
+		echo $rssDoc;
 
 	}
 
@@ -266,18 +278,132 @@ class XPath2RSS {
 		return $ini;
 
 	}
+	
+	public function generate($conf) {
+		$confpath = inifolder."$conf.ini";
+		$conf = $this->parseINI($confpath);
+		if ($this->checkNextUpdate($conf['feed'])){
+			$this->loadHTML($conf['url']);
+			$this->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description'], $conf['pubDate'],$conf['link']);
+			$this->writeRSS($conf['feed'], $conf['url']);
+		} else {
+			$this->returnCachedRSS($conf['feed']);
+		}
+	}
+	
+	public function checkNextUpdate($feedTitle){
+		$query = "SELECT nextUpdate
+				  FROM feeds
+				  WHERE feedID = ?";
+		$result = $this->RSSQuery($query,false,true,array($feedTitle));
+		if (empty($result)){
+			return true;
+		} else {
+			if(new DateTime() > new DateTime($result['nextUpdate'])) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+	}
+	
+	public function returnCachedRSS($feedTitle){
+		$query = "SELECT feed, lastUpdate
+				  FROM feeds
+				  WHERE feedID =?";
+		$result = $this->RSSQuery($query,false,true,array($feedTitle));
+		echo $result['feed'];
+		echo "<!-- Last Updated: ".$result['lastUpdate']."-->";
+	}
+	
+	public function RSSQuery ($query,$multiple=False,$parameters=false,$parameterValues = array(), $returnfield = null) {
+		// $query = SQL query to pass to the server
+		// $multiple = returns first row as an array if false, returns all rows as an array of arrays if true
+		// $parameters = whether or not there are paramaterized values in the query, represented by ?
+		// $paramterValues = array of the parameters in the order they appear in the query
+		// $returnfield = column whose value should be return after running the query
+		
+		// Returns FALSE if query fails
+		// For successful SELECT, returns array based on $multiple
+		// For successful INSERT, returns TRUE or value of $returnfield
+		// For all other successful querys, returns TRUE
+			
+		// Connection Variables
+		$mysql_hostname = mysql_hostname; 					// IP, hostname, or FQDN of SQL server
+		$mysql_user = mysql_user;			    		// SQL user
+		$mysql_password = mysql_password;	// Password for SQL user
+		$mysql_database = mysql_database;		// Name of database
+		
+		return $this->MyQuery($query,$multiple,$parameters,$parameterValues,$mysql_hostname,$mysql_user,$mysql_password, $mysql_database,$returnfield);
+	}	
+	
+	public function MyQuery($query,$multiple,$parameters,$parameterValues,$mysql_hostname,$mysql_user,$mysql_password, $mysql_database,$returnfield) {
+	$frameworkerror = "";
+	// Connect to database
+	try {
+		$db = new PDO("mysql:host=$mysql_hostname;dbname=$mysql_database", $mysql_user, $mysql_password, array(PDO::ATTR_ERRMODE => PDO::ERRMODE_WARNING));
+	} catch (PDOException $e) {
+		$frameworkerror .= 'Connection failed: ' . $e->getMessage();
+		echo $frameworkerror;
+		exit;
+	}
+	
+	// Check for error while connecting to database. If there is an error, print error, exit and return false.
+	if (isset($db->connect_errno)){ 
+		echo "Failed to connect to MySQL: " . $db->connect_errno; // *** This should be changed to [echo "Failed to connect to MySQL"] after testing 
+		return False; 	
+	} else {
+		$stmt = $db->prepare($query);
+		$db->beginTransaction();
+		if ($parameters > 0) {
+			$i = 1;
+			foreach ($parameterValues as $key => $parameterValue) {
+				if ($parameterValue == 'NULL') {
+					$stmt->bindParam($i, null, PDO::PARAM_INT);
+				} elseif ($parameterValue == '') {
+					$stmt->bindValue($i, null, PDO::PARAM_INT);
+				} else {
+					$stmt->bindParam($i, $parameterValues[$key], PDO::PARAM_STR);
+				}
+				$i++;
+			}	
+		}
+		$errorCheck = $stmt->execute();
+		if ($errorCheck === False) {
+			$frameworkerror .= "Error<br>".$query."<br><pre>".print_r($stmt->errorInfo())."</pre>"; // *** Error should be non-specific after testing
+			$frameworkerror .= "<pre>".$query."</pre>";
+			$frameworkerror .= "<pre>".print_r($parameterValues)."</pre>";
+			return False;
+		}
+		if ($returnfield !== null) {
+			$returnvalue = $db->lastInsertID($returnfield);
+		}
+		$db->commit();
+		if ($stmt->columnCount() > 0) {
+			$result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+		} elseif ($returnfield !== null) {
+			return $returnvalue;
+		} else {
+			$result = $errorCheck;
+		}
+
+		// If $multiple is true, return result of query. Otherwise, convert the result to an array and return the array
+		if ($multiple === True) {
+			return $result; 
+		} elseif (($result === True) || ($result === False) || !($result)) {
+			return $result;
+		} else {
+			return $result[0]; 
+		}
+	}
+}
 
 }
 
 $w = new XPath2RSS();
 try {
 	if(isset($_GET["site"])) {
-		$confpath = "/var/www/rssconf/".$_GET["site"].".ini";
-		$conf = XPath2RSS::parseINI($confpath);
-
-		$w->loadHTML($conf['url']);
-		$w->scrape($conf['vars'], $conf['context'], $conf['url'], $conf['title'], $conf['description'], $conf['pubDate'],$conf['link']);
-		$w->writeRSS($conf['feed'], $conf['url']);
+		$w->generate($_GET["site"]);
 	} else {
 		echo "No site requested";
 		exit(0);
@@ -292,24 +418,4 @@ try {
 exit(0);
 
 ?>
-
-XPath2RSS
-=========
-
-Usage:
-
-	xpath2rss.php [ --test | --dry-run | --gentle ] <filename>
-
-Where:
-
-	--test     will trigger test mode, reporting about the expressions used, etc
-	--dry-run  will run as normal but will write RSS to stdout instead of disk
-	--gentle   will silently tolerate errors that may be temporary (e.g. connectivity ones)
-	<filename> is the path to an ini-file containing configuration settings
-
-Notes:
-
-	The script uses the CURL-extension when available to spoof its User-Agent -header (to not
-	look like a scraper).  To get in on the fun, try $ apt-get install php5-curl (assuming a
-	Debian-like system).
 
